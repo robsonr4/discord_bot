@@ -105,6 +105,7 @@ async def on_message(message: Message) -> None:
             await asyncio.sleep(5)
             await message.author.add_roles(get(message.guild.roles, name="Participant"))
             await message.channel.delete()
+            await get(message.guild.channels, name="hello").send(f"Welcome to the hackathon, {message.author.mention}!")
             return
     elif channel_name == "🔖│tags│🔖":
         return
