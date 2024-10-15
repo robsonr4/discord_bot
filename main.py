@@ -4,9 +4,10 @@ from dotenv import load_dotenv
 from discord import Intents, Client, Message, Member, Role, Embed, TextChannel, Color, Guild, PermissionOverwrite, Interaction, ButtonStyle, InteractionType
 from discord.utils import get
 from responses import get_response
-from const import MESSAGES
+from const import MESSAGES, TAGS_ROLES
 import asyncio
 from modals import TagsButton
+from funcs import tags_interaction, create_role, create_category, create_channel
 
 # ENV setup
 load_dotenv()
@@ -22,13 +23,17 @@ client: Client = Client(intents=intents)
 @client.event
 async def on_interaction(interaction: Interaction) -> None:
     if interaction.type == InteractionType.component:
-        print("HERE 1")
-        print(interaction.data)
-        if interaction.data["custom_id"] == "role_JS":
-            print("HERE 2")
-            await interaction.user.add_roles(get(interaction.guild.roles, name="JS"))
-            await interaction.response.send_message(f"Added role JS to {interaction.user.mention}", ephemeral=True)
-            print("HERE 3")
+        await tags_interaction(interaction)
+        custom_id = interaction.data["custom_id"]
+        role_name = custom_id[5:]
+        role = get(interaction.guild.roles, name=role_name)
+        TAGS_ROLES[custom_id] = f"{role_name} ({len(role.members)})"
+        
+        # edit message
+        await interaction.message.edit(view=TagsButton(roles=TAGS_ROLES))
+        
+
+
 # NEW MEMBER HANDLER
 @client.event
 async def on_member_join(member: Member) -> None:
@@ -60,13 +65,6 @@ async def on_member_join(member: Member) -> None:
         color=Color.blue()
     )
     await channel.send(embed=rules_embed)
-
-
-
-
-
-
-    
 
 
 # MESSAGE HANDLER
@@ -112,13 +110,25 @@ async def on_message(message: Message) -> None:
     elif channel_name == "botcontrol":
         if user_message := message.content.lower() == "!send-tags":
             tags_channel: TextChannel = get(message.guild.channels, name="🔖│tags│🔖")
+            # delete all messages in channel
+            async for msg in tags_channel.history(limit=100):
+                await msg.delete()
+            
+            # check all members of roles
+            for custom_id, label in TAGS_ROLES.items():
+                role_name = custom_id[5:]
+                
+                role = await create_role(message.guild, role_name)
+                category = await create_category(message.guild, "team-building")
+                channel = await create_channel(message.guild, role_name, category, "team-building")
+                TAGS_ROLES[custom_id] = f"{role_name} ({len(role.members)})"
+            
             embed: Embed = Embed(
                 title=MESSAGES["TAGS_TITLE"],
                 description=MESSAGES["TAGS_DESCRIPTION"],
                 color=Color.blue()
             )
-            roles = ["JS", "Python", "Java", "C++", "Ruby", "PHP"]  # Add all your desired roles here
-            await tags_channel.send(embed=embed, view=TagsButton(roles=roles))
+            await tags_channel.send(embed=embed, view=TagsButton(roles=TAGS_ROLES))
             return
 
 

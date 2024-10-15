@@ -13,3 +13,14 @@ MESSAGES = {
     "TAGS_TITLE": "YOUR HACKER SKILLS",
     "TAGS_DESCRIPTION": "Tag yourself to find new teammates or to connect with people with the same skills as you!"
 }
+
+
+TAGS_ROLES = {
+    "role_JS": "JS",
+    "role_Python": "Python",
+    "role_SQL": "SQL",
+    "role_DevOps": "DevOps",
+    "role_PM": "PM",
+    "role_Designer": "Designer",
+    "role_Psychologist": "Psychologist"
+}
