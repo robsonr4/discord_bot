@@ -1,13 +1,14 @@
 from typing import Final
 import os
 from dotenv import load_dotenv
-from discord import Intents, Client, Message, Member, Role, Embed, TextChannel, Color, Guild, PermissionOverwrite, Interaction, ButtonStyle, InteractionType
+from discord import Intents, Client, Message, Member, Embed, TextChannel, Color, Guild, PermissionOverwrite, Interaction, InteractionType
 from discord.utils import get
-from responses import get_response
 from const import MESSAGES, TAGS_ROLES
 import asyncio
 from modals import TagsButton
 from funcs import tags_interaction, create_role, create_category, create_channel
+
+### CLEANING AND DESCRIPTION TIME
 
 # ENV setup
 load_dotenv()
@@ -19,17 +20,18 @@ intents.message_content = True
 intents.members = True
 client: Client = Client(intents=intents)
 
-# TAGS HANDLER
+# INTERACTIONS HANDLER
 @client.event
 async def on_interaction(interaction: Interaction) -> None:
-    if interaction.type == InteractionType.component:
+    if interaction.type == InteractionType.component and interaction.data["custom_id"].startswith("role_"):
+        # When a user clicks a tags button
         await tags_interaction(interaction)
+
+        # update the role count
         custom_id = interaction.data["custom_id"]
         role_name = custom_id[5:]
         role = get(interaction.guild.roles, name=role_name)
         TAGS_ROLES[custom_id] = f"{role_name} ({len(role.members)})"
-        
-        # edit message
         await interaction.message.edit(view=TagsButton(roles=TAGS_ROLES))
         
 
@@ -37,15 +39,6 @@ async def on_interaction(interaction: Interaction) -> None:
 # NEW MEMBER HANDLER
 @client.event
 async def on_member_join(member: Member) -> None:
-    print(f"{member} has joined the server.")
-    await member.send("Welcome to the server!")
-    
-    # Add role
-    # role: Role = get(member.guild.roles, name="New Member")
-    # await member.add_roles(role)
-    # print(f"Added role {role.name} to {member.name}")
-    # await member.send(f"You have been added to the {role.name} role.")
-
     # Create private channel
     guild: Guild = member.guild
     channel: TextChannel = await guild.create_text_channel(
@@ -56,9 +49,13 @@ async def on_member_join(member: Member) -> None:
             guild.default_role: PermissionOverwrite(read_messages=False, send_messages=False, read_message_history=False, send_messages_in_threads=False),
             guild.me: PermissionOverwrite(read_messages=True, send_messages=True, read_message_history=True, send_messages_in_threads=True)
         } 
-        )
+    )
     await channel.edit(name=f"onboarding-{member.name}")
+
+    # Send welcome message
     await channel.send(f"Welcome to the server, {member.mention}!")
+
+    # Send rules embed
     rules_embed: Embed = Embed(
         title="Rules",
         description=MESSAGES["RULES_ACKNOWLEDGEMENT"],
@@ -66,21 +63,6 @@ async def on_member_join(member: Member) -> None:
     )
     await channel.send(embed=rules_embed)
 
-
-# MESSAGE HANDLER
-async def send_message(message: Message, user_message: str) -> None:
-    if not user_message:
-        print("No message received")
-        return
-
-    if is_private := user_message[0] == '?':
-        user_message = user_message[1:]
-
-    try:
-        response: str = get_response(user_message)
-        await message.author.send(response) if is_private else await message.channel.send(response)
-    except Exception as e:
-        print(e)
 
 # HANDLE STARTUP
 @client.event
@@ -90,12 +72,17 @@ async def on_ready() -> None:
 # HANDLE INCOMING MESSAGES
 @client.event
 async def on_message(message: Message) -> None:
+    # Ignore messages from the bot itself
     if message.author == client.user:
         return
     
-    channel_name: str = message.channel.name
+    channel_name: str | None = message.channel.name
+    
+    if channel_name is None:
+        return
+    
     if channel_name.startswith("onboarding-"):
-        
+        # Onboarding message
         if user_message := message.content.lower() == "i acknowledge the rules":
             await message.channel.send(MESSAGES["RULES_ACKNOWLEDGEMENT_CONFIRMATION"])
             
@@ -105,24 +92,30 @@ async def on_message(message: Message) -> None:
             await message.channel.delete()
             await get(message.guild.channels, name="hello").send(f"Welcome to the hackathon, {message.author.mention}!")
             return
-    elif channel_name == "🔖│tags│🔖":
-        return
     elif channel_name == "botcontrol":
+        # Private bot control channel for sending announcements or doing other commands
         if user_message := message.content.lower() == "!send-tags":
+            # Restart/send tags
             tags_channel: TextChannel = get(message.guild.channels, name="🔖│tags│🔖")
+            guild: Guild = message.guild
+
+            if not tags_channel:
+                tags_channel = await create_channel(guild, "🔖│tags│🔖", get(guild.categories, name="botcontrol"))
+            
             # delete all messages in channel
             async for msg in tags_channel.history(limit=100):
                 await msg.delete()
             
-            # check all members of roles
+            # update role counts
             for custom_id, label in TAGS_ROLES.items():
                 role_name = custom_id[5:]
                 
-                role = await create_role(message.guild, role_name)
-                category = await create_category(message.guild, "team-building")
-                channel = await create_channel(message.guild, role_name, category, "team-building")
+                role = await create_role(guild, role_name)
+                category = await create_category(guild, "team-building")
+                channel = await create_channel(guild, role_name, category)
                 TAGS_ROLES[custom_id] = f"{role_name} ({len(role.members)})"
             
+            # send tags embed
             embed: Embed = Embed(
                 title=MESSAGES["TAGS_TITLE"],
                 description=MESSAGES["TAGS_DESCRIPTION"],
@@ -131,15 +124,6 @@ async def on_message(message: Message) -> None:
             await tags_channel.send(embed=embed, view=TagsButton(roles=TAGS_ROLES))
             return
 
-
-    
-    
-    username: str = str(message.author)
-    user_message: str = str(message.content)
-    channel: str = str(message.channel)
-
-    print(f"{username} said: '{user_message}' ({channel})")
-    await send_message(message, user_message)
 
 # MAIN
 def main() -> None:
