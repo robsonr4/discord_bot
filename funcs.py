@@ -22,7 +22,7 @@ async def tags_interaction(interaction: Interaction) -> bool:
         role_name: str = custom_id[5:]  # Remove "role_" prefix
         role = await create_role(interaction.guild, role_name)
         category = await create_category(interaction.guild, "team-building")
-        role_channel = await create_channel(interaction.guild, role_name, "team-building")
+        role_channel = await create_channel(interaction.guild, role_name, category)
 
         if interaction.user.get_role(role.id):
             await interaction.user.remove_roles(role)
